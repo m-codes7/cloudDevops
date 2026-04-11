@@ -61,7 +61,7 @@ async function main() {
   const startTs = nowIso();
   
   //Get protocol constants
-  const validationWindowMs = 5 * 60 * 1000;
+  const validationWindowMs = 10 * 60 * 1000;
   const pollEveryMs = 1000;
   const stablePeriodMs = 120 * 1000;
 
