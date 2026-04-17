@@ -1,0 +1,49 @@
+name: Stage 3 - CI/CD with Automated Recovery
+
+on:
+  push:
+    branches:
+      - stage-3
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image
+        run: docker build -t clouddev:stage3 .
+
+      - name: Deploy to VM with health check and systemd
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ~/cloudDevops
+            git pull origin stage-3
+            docker rm -f clouddev-stage3 || true
+            docker build -t clouddev:stage3 .
+            docker run -d \
+              --name clouddev-stage3 \
+              --health-cmd="curl -f http://localhost:3000/health || exit 1" \
+              --health-interval=2s \
+              --health-retries=3 \
+              --health-timeout=3s \
+              -p 3000:3000 \
+              clouddev:stage3
+            sudo systemctl restart clouddev-stage3.service
