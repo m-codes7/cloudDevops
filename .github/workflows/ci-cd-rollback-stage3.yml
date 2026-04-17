@@ -40,7 +40,7 @@ jobs:
             docker build -t clouddev:stage3 .
             docker run -d \
               --name clouddev-stage3 \
-              --health-cmd="curl -f http://localhost:3000/health || exit 1" \
+              --health-cmd="wget -qO- http://localhost:3000/health || exit 1" \
               --health-interval=2s \
               --health-retries=3 \
               --health-timeout=3s \
