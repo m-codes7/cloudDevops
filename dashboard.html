@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CI/CD Experiment Results</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; padding: 32px; max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .sub { font-size: 13px; color: #666; margin-bottom: 32px; }
+  h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #888; margin-bottom: 14px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 32px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 32px; }
+  .card { background: white; border-radius: 8px; border: 1px solid #e0e0e0; padding: 16px; }
+  .accent { height: 3px; border-radius: 2px; margin-bottom: 12px; }
+  .slabel { font-size: 11px; color: #999; }
+  .sname { font-size: 14px; font-weight: 600; margin: 2px 0 10px; }
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; display: inline-block; margin-bottom: 10px; }
+  .bm { background: #f0f0f0; color: #666; }
+  .ba { background: #e8f5e9; color: #2e7d32; }
+  .row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #f5f5f5; }
+  .row:last-child { border-bottom: none; }
+  .rk { color: #999; }
+  .rv { font-weight: 600; font-family: monospace; }
+  .g { color: #2e7d32; }
+  .w { color: #e65100; }
+  .fl { font-size: 11px; color: #999; margin-bottom: 4px; }
+  .fv { font-size: 28px; font-weight: 700; font-family: monospace; color: #2e7d32; line-height: 1; margin-bottom: 4px; }
+  .fd { font-size: 11px; color: #aaa; }
+  .ctitle { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .csub { font-size: 11px; color: #999; margin-bottom: 12px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 11px; color: #888; }
+  .ldot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+  #error { color: #c00; font-size: 13px; padding: 16px; background: #fff0f0; border-radius: 8px; display: none; }
+</style>
+</head>
+<body>
+
+<h1>CI/CD maturity experiment : results dashboard</h1>
+<p class="sub">An empirical evaluation of automation maturity impact on deployment performance and MTTR</p>
+
+<div id="error"></div>
+<div id="app" style="display:none">
+
+  <h2>Stage overview</h2>
+  <div class="grid4" id="stageGrid"></div>
+
+  <h2>Deployment duration — all runs</h2>
+  <div class="grid2">
+    <div class="card">
+      <div class="ctitle">Deployment duration per run</div>
+      <div class="csub">seconds — grouped by stage</div>
+      <div class="legend">
+        <span><span class="ldot" style="background:#9e9e9e"></span>Stage 0</span>
+        <span><span class="ldot" style="background:#7986cb"></span>Stage 1</span>
+        <span><span class="ldot" style="background:#26a69a"></span>Stage 2</span>
+        <span><span class="ldot" style="background:#66bb6a"></span>Stage 3</span>
+      </div>
+      <div style="position:relative;height:180px"><canvas id="c1" role="img" aria-label="Deployment duration per run">Deployment duration per run by stage.</canvas></div>
+    </div>
+    <div class="card">
+      <div class="ctitle">MTTR per run</div>
+      <div class="csub">seconds — grouped by stage</div>
+      <div class="legend">
+        <span><span class="ldot" style="background:#9e9e9e"></span>Stage 0</span>
+        <span><span class="ldot" style="background:#7986cb"></span>Stage 1</span>
+        <span><span class="ldot" style="background:#26a69a"></span>Stage 2</span>
+        <span><span class="ldot" style="background:#66bb6a"></span>Stage 3</span>
+      </div>
+      <div style="position:relative;height:180px"><canvas id="c2" role="img" aria-label="MTTR per run">MTTR per run by stage.</canvas></div>
+    </div>
+  </div>
+
+  <h2>Mean comparison by stage</h2>
+  <div class="grid2">
+    <div class="card">
+      <div class="ctitle">Mean deployment duration</div>
+      <div class="csub">seconds per stage</div>
+      <div style="position:relative;height:160px"><canvas id="c3" role="img" aria-label="Mean deployment duration by stage">Mean deployment duration by stage.</canvas></div>
+    </div>
+    <div class="card">
+      <div class="ctitle">Mean MTTR</div>
+      <div class="csub">seconds per stage</div>
+      <div style="position:relative;height:160px"><canvas id="c4" role="img" aria-label="Mean MTTR by stage">Mean MTTR by stage.</canvas></div>
+    </div>
+  </div>
+
+  <h2>Key findings</h2>
+  <div class="grid3" id="findingsGrid"></div>
+
+</div>
+
+<script>
+const COLORS = ['#9e9e9e','#7986cb','#26a69a','#66bb6a'];
+const NAMES = ['Manual deployment','Continuous integration','CI/CD pipeline','CI/CD + auto recovery'];
+
+function parse(text) {
+  const rows = [];
+  for (const line of text.trim().split('\n')) {
+    const vals = []; let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === ',' && !inQ) { vals.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    vals.push(cur);
+    if (vals.length >= 11 && !isNaN(parseInt(vals[0])))
+      rows.push({ stage: parseInt(vals[0]), mttr: parseInt(vals[7])||0, rollback: vals[8], deploy: parseInt(vals[10])||0 });
+  }
+  return rows;
+}
+
+function stats(arr) {
+  const n = arr.length, mean = arr.reduce((a,b)=>a+b,0)/n;
+  const std = Math.sqrt(arr.reduce((a,b)=>a+Math.pow(b-mean,2),0)/n);
+  return { mean, std, n };
+}
+
+function barChart(id, labels, data, colors, maxY) {
+  return new Chart(document.getElementById(id), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0, borderRadius: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.y+'s' } } },
+      scales: {
+        x: { ticks: { display: false }, grid: { display: false }, border: { display: false } },
+        y: { min: 0, max: maxY, ticks: { font: { size: 10 }, color: '#aaa', callback: v => v+'s' }, grid: { color: '#f0f0f0' }, border: { display: false } }
+      }
+    }
+  });
+}
+
+fetch('experiment_log.csv')
+  .then(r => { if (!r.ok) throw new Error('CSV not found'); return r.text(); })
+  .then(text => {
+    const rows = parse(text);
+    if (!rows.length) throw new Error('No valid data in CSV');
+
+    const byStage = {};
+    for (const r of rows) { if (!byStage[r.stage]) byStage[r.stage] = []; byStage[r.stage].push(r); }
+    const stages = Object.keys(byStage).map(Number).sort();
+
+    document.getElementById('app').style.display = 'block';
+
+    const sg = document.getElementById('stageGrid');
+    for (const s of stages) {
+      const runs = byStage[s];
+      const d = stats(runs.map(r=>r.deploy)), m = stats(runs.map(r=>r.mttr));
+      const auto = runs.some(r=>r.rollback==='auto');
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="accent" style="background:${COLORS[s]||'#ccc'}"></div>
+        <div class="slabel">Stage ${s}</div>
+        <div class="sname">${NAMES[s]||'Stage '+s}</div>
+        <span class="badge ${auto?'ba':'bm'}">${auto?'auto recovery':'manual recovery'}</span>
+        <div class="row"><span class="rk">Deploy mean</span><span class="rv">${Math.round(d.mean)}s</span></div>
+        <div class="row"><span class="rk">Deploy std dev</span><span class="rv ${d.std>15?'w':'g'}">${d.std.toFixed(1)}s</span></div>
+        <div class="row"><span class="rk">MTTR mean</span><span class="rv ${auto?'g':''}">${Math.round(m.mean)}s</span></div>
+        <div class="row"><span class="rk">MTTR std dev</span><span class="rv ${m.std<2?'g':''}">${m.std.toFixed(1)}s</span></div>
+        <div class="row"><span class="rk">Runs</span><span class="rv">${runs.length}</span></div>`;
+      sg.appendChild(card);
+    }
+
+    const allD = [], allM = [], allC = [], allL = [];
+    for (const s of stages) byStage[s].forEach((r,i) => { allD.push(r.deploy); allM.push(r.mttr); allC.push(COLORS[s]||'#ccc'); allL.push(`S${s}R${i+1}`); });
+
+    barChart('c1', allL, allD, allC, Math.max(...allD)+20);
+    barChart('c2', allL, allM, allC, Math.max(...allM)+20);
+
+    const sLabels = stages.map(s=>`Stage ${s}`);
+    const sCols = stages.map(s=>COLORS[s]||'#ccc');
+    barChart('c3', sLabels, stages.map(s=>Math.round(stats(byStage[s].map(r=>r.deploy)).mean)), sCols, 120);
+    barChart('c4', sLabels, stages.map(s=>Math.round(stats(byStage[s].map(r=>r.mttr)).mean)), sCols, 220);
+
+    const findings = [], fg = document.getElementById('findingsGrid');
+    if (byStage[0]&&byStage[1]) { const a=stats(byStage[0].map(r=>r.deploy)),b=stats(byStage[1].map(r=>r.deploy)); findings.push({ l:'Deploy variance reduction (S0→S1)', v:`-${Math.round((1-b.std/a.std)*100)}%`, d:`Std dev: ${a.std.toFixed(1)}s → ${b.std.toFixed(1)}s` }); }
+    if (byStage[0]&&byStage[2]) { const a=stats(byStage[0].map(r=>r.deploy)),b=stats(byStage[2].map(r=>r.deploy)); findings.push({ l:'Deploy speed improvement (S0→S2)', v:`-${Math.round((1-b.mean/a.mean)*100)}%`, d:`Mean: ${Math.round(a.mean)}s → ${Math.round(b.mean)}s` }); }
+    if (byStage[0]&&byStage[3]) { const a=stats(byStage[0].map(r=>r.mttr)),b=stats(byStage[3].map(r=>r.mttr)); findings.push({ l:'MTTR improvement (S0→S3)', v:`-${Math.round((1-b.mean/a.mean)*100)}%`, d:`Mean: ${Math.round(a.mean)}s → ${Math.round(b.mean)}s` }); }
+    if (byStage[3]) { const b=stats(byStage[3].map(r=>r.mttr)); findings.push({ l:'Stage 3 MTTR consistency', v:`${b.std.toFixed(1)}s`, d:'Std dev — automated recovery is near-perfectly consistent' }); }
+    if (byStage[2]&&byStage[3]) { const a=stats(byStage[2].map(r=>r.mttr)),b=stats(byStage[3].map(r=>r.mttr)); findings.push({ l:'MTTR: manual vs automated recovery', v:`-${Math.round((1-b.mean/a.mean)*100)}%`, d:`Stage 2: ${Math.round(a.mean)}s → Stage 3: ${Math.round(b.mean)}s` }); }
+    if (byStage[0]&&byStage[3]) { const a=stats(byStage[0].map(r=>r.mttr)),b=stats(byStage[3].map(r=>r.mttr)); const aAct=a.mean-120,bAct=b.mean-120; findings.push({ l:'Actual recovery action time (S0→S3)', v:`-${Math.round((1-bAct/aAct)*100)}%`, d:`Excl. 120s stability window: ${Math.round(aAct)}s → ${Math.round(bAct)}s` }); }    
+
+    for (const f of findings) {
+      const c = document.createElement('div'); c.className = 'card';
+      c.innerHTML = `<div class="fl">${f.l}</div><div class="fv">${f.v}</div><div class="fd">${f.d}</div>`;
+      fg.appendChild(c);
+    }
+  })
+  .catch(err => {
+    const e = document.getElementById('error');
+    e.style.display = 'block';
+    e.textContent = 'Could not load experiment_log.csv — make sure this file is in the data/ folder alongside the dashboard. Error: ' + err.message;
+  });
+</script>
+</body>
+</html>
